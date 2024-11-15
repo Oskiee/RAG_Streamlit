@@ -45,7 +45,7 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True,
 )
 
-MAX_LINES = 20
+MAX_LINES = 100
 
 if len(uploaded_files) > MAX_LINES:
     st.warning(f"Достигнуто максимальное количество файлов. Только первые {MAX_LINES} будут обработаны.")
@@ -92,7 +92,7 @@ if not (100 <= chunk_size_input <= 2000 and 0 <= chunk_overlap_input <= 1500):
     st.stop()
 
 
-@st.cache_data(show_spinner=False)
+# @st.cache_data(show_spinner=False, ttl="8h")
 def read_files_func(uploaded_files_var):
     files_local = []
     for file in uploaded_files_var:
@@ -106,7 +106,7 @@ def read_files_func(uploaded_files_var):
 files = read_files_func(uploaded_files)
 
 
-@st.cache_data(show_spinner=False)
+# @st.cache_data(show_spinner=False, ttl="8h")
 def chunk_files_func(files_var, chunk_size, chunk_overlap):
     chunked_files_local = []
     for file in files_var:
@@ -120,8 +120,13 @@ chunked_files = chunk_files_func(files, chunk_size=chunk_size_input, chunk_overl
 if not any(is_file_valid(chunked_file) for chunked_file in chunked_files):
     st.stop()
 
+if 'files' not in st.session_state:
+    st.session_state.files = []
 
-@st.cache_resource(show_spinner=False)
+if 'folder_index' not in st.session_state:
+    st.session_state.folder_index = None
+
+# @st.cache_resource(show_spinner=False, ttl="8h")
 def create_folder_index(files_var, embedding, vector_store):
     with st.spinner("Индексация документов... Это может занять некоторое время⏳"):
         folder_index_local = embed_files(
@@ -130,10 +135,23 @@ def create_folder_index(files_var, embedding, vector_store):
             vector_store=vector_store,
             model=EMBED_MODEL,
         )
-        return folder_index_local
+
+    # save ids of files in session
+    st.session_state.files = [file.id for file in files_var]
+    st.session_state.folder_index = folder_index_local
+    return folder_index_local
 
 
-folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
+print(st.session_state.files)
+print([file.id for file in chunked_files])
+if [file.id for file in chunked_files] != st.session_state.files:
+    print("Creating new folder index")
+    folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
+else:
+    print("Using existing folder index")
+    folder_index = st.session_state.folder_index
+
+# folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
 
 with st.form(key="qa_form"):
     query = st.text_area("Задайте вопрос по документу")

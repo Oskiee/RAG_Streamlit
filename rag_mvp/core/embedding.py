@@ -49,7 +49,7 @@ class FolderIndex:
 
         return cls(files=files, index=index)
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, ttl="8h")
 def get_model(embedding: str, **kwargs):
     if embedding == 'mistral':
         return MistralAIEmbeddings(**kwargs)
