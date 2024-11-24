@@ -39,8 +39,8 @@ st.header("🔍Умный поиск по документации AimateDocs")
 sidebar()
 
 uploaded_files = st.file_uploader(
-    "Загрузите pdf, docx, или txt файл",
-    type=["pdf", "docx", "txt"],
+    "Загрузите pdf, docx, txt, xlsx или  pptx файл",
+    type=["pdf", "docx", "txt", "xlsx", "pptx"],
     help="Сканированные документы пока не поддерживаются.",
     accept_multiple_files=True,
 )

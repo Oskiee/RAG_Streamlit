@@ -7,6 +7,9 @@ import docx2txt
 from langchain.docstore.document import Document
 import fitz
 from hashlib import md5
+from xlsx2html import xlsx2html
+from pptx import Presentation
+from openpyxl import load_workbook
 
 from abc import abstractmethod, ABC
 from copy import deepcopy
@@ -98,6 +101,45 @@ class TxtFile(File):
         return cls(name=file.name, id=md5(file.read()).hexdigest(), docs=[doc])
 
 
+class XlsmFile(File):
+    @classmethod
+    def from_bytes(cls, file: BytesIO) -> "XlsmFile":
+        workbook = load_workbook(file)
+        docs = []
+
+        for i, sheet in enumerate(workbook.sheetnames):
+            html = xlsx2html(file, sheet=sheet) #f'{sheet}.html',
+            html.seek(0)
+            doc = Document(page_content=html.read().strip())
+            html.seek(0)
+            doc.metadata["page"] = i + 1
+            doc.metadata["source"] = f"p-{sheet}"
+            docs.append(doc)
+            #html.seek(0)
+        file.seek(0)
+        return cls(name=file.name, id=md5(file.read()).hexdigest(), docs=docs)
+
+
+class PptxFile(File):
+    @classmethod
+    def from_bytes(cls, file: BytesIO) -> "PptxFile":
+        presentation = Presentation(file)
+        docs = []
+        for slide_number, slide in enumerate(presentation.slides):
+            text = ""
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text += shape.text + "\n"
+
+            text = strip_consecutive_newlines(text)
+            doc = Document(page_content=text.strip())
+            doc.metadata["page"] = slide_number + 1
+            doc.metadata["source"] = f"p-{slide_number + 1}"
+            docs.append(doc)
+            file.seek(0)
+        return cls(name=file.name, id=md5(file.read()).hexdigest(), docs=docs)
+
+
 def read_file(file: BytesIO) -> File:
     """Reads an uploaded file and returns a File object"""
     if file.name.lower().endswith(".docx"):
@@ -106,5 +148,9 @@ def read_file(file: BytesIO) -> File:
         return PdfFile.from_bytes(file)
     elif file.name.lower().endswith(".txt"):
         return TxtFile.from_bytes(file)
+    elif file.name.lower().endswith(".xlsx"):
+        return XlsmFile.from_bytes(file)
+    elif file.name.lower().endswith(".pptx"):
+        return PptxFile.from_bytes(file)
     else:
         raise NotImplementedError(f"File type {file.name.split('.')[-1]} not supported")
