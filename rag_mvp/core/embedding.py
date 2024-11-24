@@ -1,5 +1,5 @@
 from langchain.vectorstores import VectorStore
-# from scipy.special import kwargs
+import time
 
 from .parsing import File
 from langchain_community.vectorstores import FAISS
@@ -39,13 +39,30 @@ class FolderIndex:
         cls, files: List[File], embeddings: Embeddings, vector_store: Type[VectorStore]
     ) -> "FolderIndex":
         """Creates an index from files."""
-
         all_docs = cls._combine_files(files)
-
-        index = vector_store.from_documents(
-            documents=all_docs,
-            embedding=embeddings,
-        )
+        try:
+            index = vector_store.from_documents(
+                    documents=all_docs,
+                    embedding=embeddings,
+                )
+        except KeyError as e:
+            print(f"Error: {e}")
+            raise e
+        # for file in files[1:]:
+        #     all_docs_temp = cls._combine_files([file])
+        #
+        #     try:
+        #         index_temp = vector_store.from_documents(
+        #             documents=all_docs_temp,
+        #             embedding=embeddings,
+        #         )
+        #     except KeyError as e:
+        #         print(f"Error: {e}")
+        #         raise e
+        #
+        #     index.merge_from(index_temp)
+        #
+        #     time.sleep(5)
 
         return cls(files=files, index=index)
 
