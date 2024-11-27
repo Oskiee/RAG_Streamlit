@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 import docx2txt
+import chardet
 from langchain.docstore.document import Document
 import fitz
 from hashlib import md5
@@ -75,14 +76,17 @@ class DocxFile(File):
 class PdfFile(File):
     @classmethod
     def from_bytes(cls, file: BytesIO) -> "PdfFile":
-        pdf = fitz.open(stream=file.read(), filetype="pdf")  # type: ignore
+        file.seek(0)
+        pdf = fitz.open(stream=file.read(), filetype="pdf")
         docs = []
         for i, page in enumerate(pdf):
             text = page.get_text(sort=True)
+            # Detect encoding
+            # Decode text using the detected encoding
             text = strip_consecutive_newlines(text)
             doc = Document(page_content=text.strip())
             doc.metadata["page"] = i + 1
-            doc.metadata["source"] = f"p-{i+1}"
+            doc.metadata["source"] = f"p-{i + 1}"
             docs.append(doc)
         # file.read() mutates the file object, which can affect caching
         # so we need to reset the file pointer to the beginning

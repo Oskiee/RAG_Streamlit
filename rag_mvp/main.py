@@ -146,7 +146,7 @@ with main_col1:
 
     files = read_files_func(uploaded_files)
 
-    if sum(len(doc.page_content) for file in files for doc in file.docs) > 1_596_007:
+    if sum(len(doc.page_content) for file in files for doc in file.docs) > 5_000_000:
         st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
         st.stop()
 
@@ -179,7 +179,11 @@ with main_col1:
                     model=EMBED_MODEL,
                 )
             except Exception as e:
-                st.error(f"Ваш запрос не может быть обработан. Вероятно, загруженные документы слишком большие. Пожалуйста, попробуйте удалить некоторые документы или загрузить другие.")
+                st.error(f"Ваш запрос не может быть обработан. Вероятно, документ поврежден или имеет нестандартную кодировку. Попробуйте загрузить другой файл.")
+                # print the whole document
+                # for file in files_var:
+                #     for doc in file.docs:
+                #         print(doc.page_content)
                 print("!!!ВОЗНИКЛА ОШИБКА ПРИ ИНДЕКСАЦИИ!!!\nОШИБКА:", e)
                 folder_index_local = None
 
