@@ -17,68 +17,55 @@ from core.embedding import embed_files
 from core.qa import query_folder
 from core.utils import get_llm
 
+
 load_dotenv()
 
 EMBEDDING = "mistral"
 EMBED_MODEL = "mistral-embed"
 VECTOR_STORE = "faiss"
 MODEL_LIST = ["mistral-large-latest", "mistral-small-latest"]
-
-if "MISTRAL_API_KEY" not in os.environ:
-    os.environ["MISTRAL_API_KEY"] = getpass.getpass("Enter your Mistral API key: ")
-
-st.set_page_config(page_title="RAG_MVP", page_icon="🔍", layout="wide")
-# Remove whitespace from the top of the page and sidebar
-st.markdown("""
-        <style>
-               .block-container {
-                    padding-top: 2rem;
-                    padding-bottom: 5rem;
-                    padding-left: 5rem;
-                    padding-right: 5rem;
-                }
-        </style>
-        """, unsafe_allow_html=True)
-hide_default_format = """
-       <style>
-       #MainMenu {visibility: hidden; }
-       footer {visibility: hidden;}
-       </style>
-       """
-st.markdown(hide_default_format, unsafe_allow_html=True)
-
-# Load the local image file
-cur_dir = os.path.dirname(os.path.abspath(__file__))
-logo_path = os.path.join(cur_dir, "aimate_symbol_cropped.png")
-st.image(logo_path, width=100)
-st.header("Умный поиск по документации AimateDocs")
-
-# Create two columns
-# col1, col2 = st.columns([0.57, 0.43], vertical_alignment="center")
-#
-# with col1:
-#     st.header("Умный поиск по документации AimateDocs")
-#
-# with col2:
-#     st.image(logo_path, width=150)
-
-# Enable caching for expensive functions
-# bootstrap_caching()
-
-sidebar()
-
-main_col1, main_col2 = st.columns([0.45, 0.55], gap='medium')
-
-with main_col2:
-    # st.markdown("#### Задайте вопрос")
-    with st.form(key="qa_form", border=False):
-        query = st.text_area("Задайте вопрос по загруженным документам", height=94)
-        st.session_state.query = query
-        submit = st.form_submit_button("Отправить")
+MAX_LINES = 100
 
 
-with main_col1:
-    # st.markdown("#### Загрузите документы")
+def create_folder_index(files_var, embedding, vector_store):
+    with st.spinner("Обработка документов... Это может занять некоторое время⏳"):
+        try:
+            folder_index_local = embed_files(
+                files=files_var,
+                embedding=embedding,
+                vector_store=vector_store,
+                model=EMBED_MODEL,
+            )
+        except Exception as e:
+            st.error(
+                f"Ваш запрос не может быть обработан. Вероятно, документ поврежден или имеет нестандартную кодировку. Попробуйте загрузить другой файл.")
+            print("!!!ВОЗНИКЛА ОШИБКА ПРИ ИНДЕКСАЦИИ!!!\nОШИБКА:", e)
+            folder_index_local = None
+
+    if folder_index_local is None:
+        st.stop()
+    st.session_state.files = [file.id for file in files_var]
+    st.session_state.folder_index = folder_index_local
+    return folder_index_local
+
+
+def chunk_files_func(files_var, chunk_size, chunk_overlap):
+    chunked_files_local = []
+    for file in files_var:
+        chunked_file = chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        chunked_files_local.append(chunked_file)
+    return chunked_files_local
+
+def read_files_func(uploaded_files_var):
+    files_local = []
+    for file in uploaded_files_var:
+        try:
+            files_local.append(read_file(file))
+        except Exception as e:
+            display_file_read_error(e, file_name=file.name)
+    return files_local
+
+def upload_and_settings():
     uploaded_files = st.file_uploader(
         "Загрузите ваши документы",
         type=["pdf", "docx", "txt", "xlsx", "pptx"],
@@ -86,18 +73,18 @@ with main_col1:
         accept_multiple_files=True,
     )
 
-    MAX_LINES = 100
-
     if len(uploaded_files) > MAX_LINES:
         st.warning(f"Достигнуто максимальное количество файлов. Только первые {MAX_LINES} будут обработаны.")
         multiple_files = uploaded_files[:MAX_LINES]
 
     with st.expander("Расширенные настройки"):
-        return_all_chunks = st.checkbox("Показывать все источники", help="Показывать все фрагменты из ваших документов, которые могли быть использованы для генерации ответа.")
+        return_all_chunks = st.checkbox("Показывать все источники",
+                                        help="Показывать все фрагменты из ваших документов, которые могли быть использованы для генерации ответа.")
 
         option = st.selectbox(
             "Выберите тип поиска",
-            ["Поиск смысловой информации, выявление ключевых концепций", "Поиск конкретной информации, анализ фактов/данных"],
+            ["Поиск смысловой информации, выявление ключевых концепций",
+             "Поиск конкретной информации, анализ фактов/данных"],
             placeholder="Выберите тип поиска",
             help="Поиск смысловой информации полезен, когда вам нужно понять, о чем идет речь в документах. Поиск конкретной информации полезен, когда вам нужно найти конкретные ответы на вопросы в документах.",
         )
@@ -108,7 +95,7 @@ with main_col1:
             help="Большая модель генерирует более точные и информативные ответы, но работает медленнее. Маленькая модель генерирует менее точные и краткие ответы, но работает быстрее.",
         )
 
-        if model_option == "Большая модель (точнее ответы)":
+        if model_option == "Бо��ьшая модель (точнее ответы)":
             model = MODEL_LIST[0]
         elif model_option == "Маленькая модель (быстрее)":
             model = MODEL_LIST[1]
@@ -130,36 +117,79 @@ with main_col1:
 
         show_full_doc = False
 
-    if not any(uploaded_file for uploaded_file in uploaded_files):
-        if submit:
-            st.error("Прежде чем отправить запрос, загрузите документы.")
+    return uploaded_files, return_all_chunks, option, model, chunk_size_input, chunk_overlap_input, num_chunks, show_full_doc
+
+if "MISTRAL_API_KEY" not in os.environ:
+    os.environ["MISTRAL_API_KEY"] = getpass.getpass("Enter your Mistral API key: ")
+
+st.set_page_config(page_title="RAG_MVP", page_icon="🔍", layout="wide")
+# Remove whitespace from the top of the page and sidebar
+st.markdown("""
+        <style>
+               .block-container {
+                    padding-top: 3rem;
+                    padding-bottom: 5rem;
+                    padding-left: 5rem;
+                    padding-right: 5rem;
+                }
+        </style>
+        """, unsafe_allow_html=True)
+
+hide_default_format = """
+       <style>
+       #MainMenu {visibility: hidden; }
+       footer {visibility: hidden;}
+       </style>
+       """
+
+metrika = """
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript" >
+   (function(m,e,t,r,i,k,a){m[i]=m[i]function(){(m[i].a=m[i].a[]).push(arguments)};
+   m[i].l=1*new Date();
+   for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+   k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
+   (window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
+
+   ym(99478767, "init", {
+        clickmap:true,
+        trackLinks:true,
+        accurateTrackBounce:true,
+        webvisor:true
+   });
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/99478767" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
+"""
+st.markdown(hide_default_format, unsafe_allow_html=True)
+st.markdown(metrika, unsafe_allow_html=True)
+
+
+# Add a toggle switch for chatbot mode
+sidebar()
+
+chatbot_mode = st.sidebar.checkbox("ChatBot Mode (beta)", help="Включить режим чат-бота для диалога с пользователем.")
+
+
+# /////////////////////////////////////////////////////////////////////////////////////
+# THIS IS AIMATE CHATBOT MAIN PAGE HERE:
+if chatbot_mode:
+    st.header("AimateChatBot")
+
+    uploaded_files_chat, return_all_chunks_chat, option_chat, model_chat, chunk_size_input_chat, chunk_overlap_input_chat, num_chunks_chat, show_full_doc_chat = upload_and_settings()
+
+    if not any(uploaded_file for uploaded_file in uploaded_files_chat):
         st.stop()
 
-    def read_files_func(uploaded_files_var):
-        files_local = []
-        for file in uploaded_files_var:
-            try:
-                files_local.append(read_file(file))
-            except Exception as e:
-                display_file_read_error(e, file_name=file.name)
-        return files_local
+    files_chat = read_files_func(uploaded_files_chat)
 
-    files = read_files_func(uploaded_files)
-
-    if sum(len(doc.page_content) for file in files for doc in file.docs) > 5_000_000:
+    if sum(len(doc.page_content) for file in files_chat for doc in file.docs) > 5_000_000:
         st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
         st.stop()
 
-    def chunk_files_func(files_var, chunk_size, chunk_overlap):
-        chunked_files_local = []
-        for file in files_var:
-            chunked_file = chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-            chunked_files_local.append(chunked_file)
-        return chunked_files_local
+    chunked_files_chat = chunk_files_func(files_chat, chunk_size=chunk_size_input_chat, chunk_overlap=chunk_overlap_input_chat)
 
-    chunked_files = chunk_files_func(files, chunk_size=chunk_size_input, chunk_overlap=chunk_overlap_input)
-
-    if not any(is_file_valid(chunked_file) for chunked_file in chunked_files):
+    if not any(is_file_valid(chunked_file) for chunked_file in chunked_files_chat):
         st.stop()
 
     if 'files' not in st.session_state:
@@ -168,67 +198,131 @@ with main_col1:
     if 'folder_index' not in st.session_state:
         st.session_state.folder_index = None
 
-    # @st.cache_resource(show_spinner=False, ttl="8h")
-    def create_folder_index(files_var, embedding, vector_store):
-        with st.spinner("Обработка документов... Это может занять некоторое время⏳"):
-            try:
-                folder_index_local = embed_files(
-                    files=files_var,
-                    embedding=embedding,
-                    vector_store=vector_store,
-                    model=EMBED_MODEL,
-                )
-            except Exception as e:
-                st.error(f"Ваш запрос не может быть обработан. Вероятно, документ поврежден или имеет нестандартную кодировку. Попробуйте загрузить другой файл.")
-                # print the whole document
-                # for file in files_var:
-                #     for doc in file.docs:
-                #         print(doc.page_content)
-                print("!!!ВОЗНИКЛА ОШИБКА ПРИ ИНДЕКСАЦИИ!!!\nОШИБКА:", e)
-                folder_index_local = None
-
-        if folder_index_local is None:
-            st.stop()
-        st.session_state.files = [file.id for file in files_var]
-        st.session_state.folder_index = folder_index_local
-        return folder_index_local
-
-    if [file.id for file in chunked_files] != st.session_state.files:
+    if [file.id for file in chunked_files_chat] != st.session_state.files:
         print("Creating new folder index")
-        folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
+        folder_index_chat = create_folder_index(chunked_files_chat, EMBEDDING, VECTOR_STORE)
         st.success("Документы успешно обработаны!")
+
     else:
         print("Using existing folder index")
-        folder_index = st.session_state.folder_index
+        folder_index_chat = st.session_state.folder_index
         st.success("Документы успешно обработаны!")
 
-    # folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-with main_col2:
-    if submit:
-        if not is_query_valid(query):
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt:=st.chat_input("Задайте свой вопрос по документам"):
+        # Display user message in chat message container
+        st.chat_message("user").markdown(prompt)
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        llm = get_llm(model=model_chat, temperature=0.5)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Ищем ответ на ваш вопрос в документации..."):
+                history = st.session_state.messages
+                if len(history) > 0:
+                    line = ""
+                    for message in history:
+                        line += message["role"] + ": " + message["content"] + "\n"
+                    history = line
+                else:
+                    history = ""
+                result = query_folder(
+                    folder_index=folder_index_chat,
+                    query=prompt,
+                    history=history,
+                    return_all=return_all_chunks_chat,
+                    llm=llm,
+                    num_sources=num_chunks_chat,
+                )
+
+                st.write(result.answer)
+        st.session_state.messages.append({"role": "assistant", "content": result.answer})
+
+
+# /////////////////////////////////////////////////////////////////////////////////////
+# THIS IS AIMATE DOCS MAIN PAGE HERE:
+else:
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    logo_path = os.path.join(cur_dir, "aimate_symbol_cropped.png")
+    st.image(logo_path, width=100)
+    st.header("Умный поиск по документации AimateDocs")
+
+    main_col1, main_col2 = st.columns([0.45, 0.55], gap='medium')
+
+    with main_col2:
+        with st.form(key="qa_form", border=False):
+            query = st.text_area("Задайте вопрос по загруженным документам", height=94)
+            st.session_state.query = query
+            submit = st.form_submit_button("Отправить")
+
+    with main_col1:
+        uploaded_files, return_all_chunks, option, model, chunk_size_input, chunk_overlap_input, num_chunks, show_full_doc = upload_and_settings()
+
+        if not any(uploaded_file for uploaded_file in uploaded_files):
+            if submit:
+                st.error("Прежде чем отправить запрос, загрузите документы.")
             st.stop()
 
-        answer_col, sources_col = st.columns(2)
+        files = read_files_func(uploaded_files)
 
-        llm = get_llm(model=model, temperature=0)
+        if sum(len(doc.page_content) for file in files for doc in file.docs) > 5_000_000:
+            st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
+            st.stop()
 
-        with st.spinner("Ищем ответ на ваш вопрос в документации..."):
-            result = query_folder(
-                folder_index=folder_index,
-                query=query,
-                return_all=return_all_chunks,
-                llm=llm,
-                num_sources=num_chunks,
-            )
+        chunked_files = chunk_files_func(files, chunk_size=chunk_size_input, chunk_overlap=chunk_overlap_input)
 
-        with answer_col:
-            st.markdown("#### Ответ")
-            st.markdown(result.answer)
+        if not any(is_file_valid(chunked_file) for chunked_file in chunked_files):
+            st.stop()
 
-        with sources_col:
-            st.markdown("#### Источники")
-            for source in result.sources:
-                st.markdown(source.page_content)
-                st.markdown(source.metadata["source"])
-                st.markdown("---")
+        if 'files' not in st.session_state:
+            st.session_state.files = []
+
+        if 'folder_index' not in st.session_state:
+            st.session_state.folder_index = None
+
+        if [file.id for file in chunked_files] != st.session_state.files:
+            print("Creating new folder index")
+            folder_index = create_folder_index(chunked_files, EMBEDDING, VECTOR_STORE)
+            st.success("Документы успешно обработаны!")
+        else:
+            print("Using existing folder index")
+            folder_index = st.session_state.folder_index
+            st.success("Документы успешно обработаны!")
+
+    with main_col2:
+        if submit:
+            if not is_query_valid(query):
+                st.stop()
+
+            answer_col, sources_col = st.columns(2)
+
+            llm = get_llm(model=model, temperature=0)
+
+            with st.spinner("Ищем ответ на ваш вопрос в документации..."):
+                result = query_folder(
+                    folder_index=folder_index,
+                    query=query,
+                    history="",
+                    return_all=return_all_chunks,
+                    llm=llm,
+                    num_sources=num_chunks,
+                )
+
+            with answer_col:
+                st.markdown("#### Ответ")
+                st.markdown(result.answer)
+
+            with sources_col:
+                st.markdown("#### Источники")
+                for source in result.sources:
+                    st.markdown(source.page_content)
+                    st.markdown(source.metadata["source"])
+                    st.markdown("---")

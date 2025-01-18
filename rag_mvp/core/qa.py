@@ -14,6 +14,7 @@ class AnswerWithSources(BaseModel):
 
 def query_folder(
     query: str,
+    history: str,
     folder_index: FolderIndex,
     llm: BaseChatModel,
     return_all: bool = False,
@@ -39,9 +40,25 @@ def query_folder(
         prompt=STUFF_PROMPT,
     )
 
+
+    summary = [
+        (
+            "system",
+            f"""Given a context of recent chat history, summarize the user's question as a search term. Return ONLY this paraphrase.
+            Also you should enhance user's question with the chat history if it is necessary and relevant.
+            HISTORY: {history}
+            QUESTION: {query}"""
+
+        )
+    ]
+
+    query = llm.invoke(summary).content
+
+    print(query)
+
     relevant_docs = folder_index.index.similarity_search(query, k=num_sources)
-    result = chain(
-        {"input_documents": relevant_docs, "question": query}, return_only_outputs=True
+    result = chain.invoke(
+        {"input_documents": relevant_docs, "question": query, "history": history}, return_only_outputs=True
     )
     sources = relevant_docs
 
