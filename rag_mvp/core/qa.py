@@ -46,17 +46,20 @@ def query_folder(
             "system",
             f"""Given a context of recent chat history, summarize the user's question as a search term. Return ONLY this paraphrase.
             Also you should enhance user's question with the chat history if it is necessary and relevant.
+            IF YOU THINK USER QUERY IS NOT A SEARCH TERM BUT A QUESTION TO THE CHAT BOT YOU SHOULD LEAVE IT UNCHANGED!
+            ALSO, KEEP IN MIND THAT QUERIES CAN REFER TO DIFFERENT DOCUMENTS, SO NOT EVERY QUERY IS DEPENDENT ON PREVIOUS QUESTIONS!
+            
             HISTORY: {history}
             QUESTION: {query}"""
 
         )
     ]
 
-    query = llm.invoke(summary).content
+    search_query = llm.invoke(summary).content
 
-    print(query)
+    print(search_query)
 
-    relevant_docs = folder_index.index.similarity_search(query, k=num_sources)
+    relevant_docs = folder_index.index.similarity_search(search_query, k=num_sources)
     result = chain.invoke(
         {"input_documents": relevant_docs, "question": query, "history": history}, return_only_outputs=True
     )

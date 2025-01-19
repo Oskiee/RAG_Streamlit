@@ -1,3 +1,4 @@
+from streamlit_float import *
 import streamlit as st
 from dotenv import load_dotenv
 import os
@@ -5,12 +6,10 @@ import getpass
 
 from components.sidebar import sidebar
 from ui import (
-    wrap_doc_in_html,
     is_query_valid,
     is_file_valid,
     display_file_read_error,
 )
-from core.caching import bootstrap_caching
 from core.parsing import read_file
 from core.chunking import chunk_file
 from core.embedding import embed_files
@@ -79,7 +78,7 @@ def upload_and_settings():
 
     with st.expander("Расширенные настройки"):
         return_all_chunks = st.checkbox("Показывать все источники",
-                                        help="Показывать все фрагменты из ваших документов, которые могли быть использованы для генерации ответа.")
+                                        help="Показывать все фрагменты из ваших документов, которые могли быть использованы для генерации ответа. (не работает в режиме ChatBot)")
 
         option = st.selectbox(
             "Выберите тип поиска",
@@ -95,7 +94,7 @@ def upload_and_settings():
             help="Большая модель генерирует более точные и информативные ответы, но работает медленнее. Маленькая модель генерирует менее точные и краткие ответы, но работает быстрее.",
         )
 
-        if model_option == "Бо��ьшая модель (точнее ответы)":
+        if model_option == "Большая модель (точнее ответы)":
             model = MODEL_LIST[0]
         elif model_option == "Маленькая модель (быстрее)":
             model = MODEL_LIST[1]
@@ -169,7 +168,7 @@ st.markdown(metrika, unsafe_allow_html=True)
 sidebar()
 
 chatbot_mode = st.sidebar.checkbox("ChatBot Mode (beta)", help="Включить режим чат-бота для диалога с пользователем.")
-
+float_init()
 
 # /////////////////////////////////////////////////////////////////////////////////////
 # THIS IS AIMATE CHATBOT MAIN PAGE HERE:
@@ -216,6 +215,16 @@ if chatbot_mode:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # add a button to clear chat history
+
+    if st.session_state.messages:
+        button_container = st.container()
+        button_container.float("bottom: 140px; right: -725px;")
+        with button_container:
+            if st.button("Очистить историю", type="primary"):
+                st.session_state.messages = []
+                st.rerun()
+
     if prompt:=st.chat_input("Задайте свой вопрос по документам"):
         # Display user message in chat message container
         st.chat_message("user").markdown(prompt)
@@ -225,7 +234,7 @@ if chatbot_mode:
         llm = get_llm(model=model_chat, temperature=0.5)
 
         with st.chat_message("assistant"):
-            with st.spinner("Ищем ответ на ваш вопрос в документации..."):
+            with st.spinner("Ищу ответ на ваш вопрос в документации..."):
                 history = st.session_state.messages
                 if len(history) > 0:
                     line = ""
