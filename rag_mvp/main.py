@@ -71,14 +71,14 @@ def read_files_func(uploaded_files_var):
 def upload_and_settings():
     uploaded_files = st.file_uploader(
         "Загрузите ваши документы",
-        type=["pdf", "docx", "txt", "xlsx", "pptx"],
+        type=["pdf", "docx", "txt", "xlsx", "pptx", "doc", "xlsm", "xls"],
         help="Сканированные документы пока не поддерживаются.",
         accept_multiple_files=True,
     )
 
     if len(uploaded_files) > MAX_LINES:
         st.warning(f"Достигнуто максимальное количество файлов. Только первые {MAX_LINES} будут обработаны.")
-        multiple_files = uploaded_files[:MAX_LINES]
+        uploaded_files = uploaded_files[:MAX_LINES]
 
     with st.expander("Расширенные настройки"):
         return_all_chunks = st.checkbox("Показывать все источники",
@@ -293,7 +293,7 @@ else:
             st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
             st.stop()
 
-        chunked_files = chunk_files_func(files, chunk_size=chunk_size_input, chunk_overlap=chunk_overlap_input)
+        chunked_files, chunked_docs = chunk_files_func(files, chunk_size=chunk_size_input, chunk_overlap=chunk_overlap_input)
 
         if not any(is_file_valid(chunked_file) for chunked_file in chunked_files):
             st.stop()
