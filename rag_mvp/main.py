@@ -3,6 +3,7 @@ import streamlit as st
 from dotenv import load_dotenv
 import os
 import getpass
+from tqdm import tqdm
 
 from components.sidebar import sidebar
 from ui import (
@@ -15,6 +16,7 @@ from core.chunking import chunk_file
 from core.embedding import embed_files
 from core.qa import query_folder
 from core.utils import get_llm
+from core.config import OPENROUTER_MODEL_NAME
 
 
 load_dotenv()
@@ -22,24 +24,24 @@ load_dotenv()
 EMBEDDING = "mistral"
 EMBED_MODEL = "mistral-embed"
 VECTOR_STORE = "faiss"
-MODEL_LIST = ["mistral-large-latest", "mistral-small-latest"]
+MODEL_LIST = [OPENROUTER_MODEL_NAME, OPENROUTER_MODEL_NAME, OPENROUTER_MODEL_NAME]
 MAX_LINES = 100
 
 
 def create_folder_index(files_var, embedding, vector_store):
     with st.spinner("Обработка документов... Это может занять некоторое время⏳"):
-        try:
+        # try:
             folder_index_local = embed_files(
                 files=files_var,
                 embedding=embedding,
                 vector_store=vector_store,
                 model=EMBED_MODEL,
             )
-        except Exception as e:
-            st.error(
-                f"Ваш запрос не может быть обработан. Вероятно, документ поврежден или имеет нестандартную кодировку. Попробуйте загрузить другой файл.")
-            print("!!!ВОЗНИКЛА ОШИБКА ПРИ ИНДЕКСАЦИИ!!!\nОШИБКА:", e)
-            folder_index_local = None
+        # except Exception as e:
+        #     st.error(
+        #         f"Ваш запрос не может быть обработан. Вероятно, документ поврежден или имеет нестандартную кодировку. Попробуйте загрузить другой файл.")
+        #     print("!!!ВОЗНИКЛА ОШИБКА ПРИ ИНДЕКСАЦИИ!!!\nОШИБКА:", e)
+        #     folder_index_local = None
 
     if folder_index_local is None:
         st.stop()
@@ -50,10 +52,12 @@ def create_folder_index(files_var, embedding, vector_store):
 
 def chunk_files_func(files_var, chunk_size, chunk_overlap):
     chunked_files_local = []
-    for file in files_var:
-        chunked_file = chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    chunked_docs_local = []
+    for file in tqdm(files_var, desc="chunking files"):
+        chunked_file, chunked_doc = chunk_file(file, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         chunked_files_local.append(chunked_file)
-    return chunked_files_local
+        chunked_docs_local += (chunked_doc)
+    return chunked_files_local, chunked_docs_local
 
 def read_files_func(uploaded_files_var):
     files_local = []
@@ -182,11 +186,11 @@ if chatbot_mode:
 
     files_chat = read_files_func(uploaded_files_chat)
 
-    if sum(len(doc.page_content) for file in files_chat for doc in file.docs) > 5_000_000:
+    if sum(len(doc.page_content) for file in files_chat for doc in file.docs) > 100_000_000:
         st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
         st.stop()
 
-    chunked_files_chat = chunk_files_func(files_chat, chunk_size=chunk_size_input_chat, chunk_overlap=chunk_overlap_input_chat)
+    chunked_files_chat, chunked_docs_chat = chunk_files_func(files_chat, chunk_size=chunk_size_input_chat, chunk_overlap=chunk_overlap_input_chat)
 
     if not any(is_file_valid(chunked_file) for chunked_file in chunked_files_chat):
         st.stop()
@@ -213,13 +217,13 @@ if chatbot_mode:
     # Display chat messages from history on app rerun
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            st.markdown(str(message["content"]))
 
     # add a button to clear chat history
 
     if st.session_state.messages:
         button_container = st.container()
-        button_container.float("bottom: 140px; right: -725px;")
+        button_container.float("bottom: 140px; right: -825px;")
         with button_container:
             if st.button("Очистить историю", type="primary"):
                 st.session_state.messages = []
@@ -231,7 +235,7 @@ if chatbot_mode:
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        llm = get_llm(model=model_chat, temperature=0.5)
+        llm = get_llm(model=model_chat)
 
         with st.chat_message("assistant"):
             with st.spinner("Ищу ответ на ваш вопрос в документации..."):
@@ -239,12 +243,14 @@ if chatbot_mode:
                 if len(history) > 0:
                     line = ""
                     for message in history:
-                        line += message["role"] + ": " + message["content"] + "\n"
+                        line += str(message["role"]) + ": " + str(message["content"]) + "\n"
                     history = line
                 else:
                     history = ""
+                
                 result = query_folder(
                     folder_index=folder_index_chat,
+                    chunked_files=chunked_docs_chat,
                     query=prompt,
                     history=history,
                     return_all=return_all_chunks_chat,
@@ -252,8 +258,9 @@ if chatbot_mode:
                     num_sources=num_chunks_chat,
                 )
 
-                st.write(result.answer)
-        st.session_state.messages.append({"role": "assistant", "content": result.answer})
+                response = st.write_stream(result)
+
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
 
 # /////////////////////////////////////////////////////////////////////////////////////

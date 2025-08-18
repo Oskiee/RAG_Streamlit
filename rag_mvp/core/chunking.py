@@ -1,6 +1,7 @@
 from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .parsing import File
+from tqdm import tqdm
 
 
 def chunk_file(
@@ -35,4 +36,4 @@ def chunk_file(
 
     chunked_file = file.copy()
     chunked_file.docs = chunked_docs
-    return chunked_file
+    return chunked_file, chunked_docs

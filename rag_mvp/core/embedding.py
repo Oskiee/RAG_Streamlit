@@ -1,9 +1,13 @@
 from langchain.vectorstores import VectorStore
+from langchain_core.vectorstores.base import VectorStoreRetriever
 import time
+import logging
+import sys
+from datetime import datetime
 
 from .parsing import File
 from langchain_community.vectorstores import FAISS
-from .embedder import MultilingualE5
+from .embedder import MultilingualE5 #Pinecone_MultilingualE5
 from langchain.embeddings.base import Embeddings
 from langchain_mistralai import MistralAIEmbeddings
 from typing import List, Type
@@ -11,6 +15,8 @@ from langchain.docstore.document import Document
 import streamlit as st
 from dataclasses import dataclass
 
+# logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# logger = logging.getLogger(__name__)
 
 @dataclass(init=False)
 class FolderIndex:
@@ -38,13 +44,18 @@ class FolderIndex:
     def from_files(
         cls, files: List[File], embeddings: Embeddings, vector_store: Type[VectorStore]
     ) -> "FolderIndex":
-        """Creates an index from files."""
+        """Creates an SPARSE index from files."""
+        print('------Combine Files------')
         all_docs = cls._combine_files(files)
         try:
+            print('------Creating Vectorstore------')
+            index_start_time = datetime.now()
             index = vector_store.from_documents(
                     documents=all_docs,
                     embedding=embeddings,
                 )
+            index_end_time = datetime.now() - index_start_time
+            print(f'------Vectorstore Created: {index_end_time.seconds}s------')
         except KeyError as e:
             print(f"Error: {e}")
             raise e
@@ -64,12 +75,14 @@ class FolderIndex:
         #
         #     time.sleep(5)
 
-        return cls(files=files, index=index)
+        return cls(files=files, index=index)   
+    
 
 @st.cache_resource(show_spinner=False, ttl="8h")
 def get_model(embedding: str, **kwargs):
     if embedding == 'mistral':
-        return MistralAIEmbeddings(**kwargs)
+        return MultilingualE5()
+        # return MistralAIEmbeddings(**kwargs)
     if embedding == 'multilinguale5':
         return MultilingualE5()
 

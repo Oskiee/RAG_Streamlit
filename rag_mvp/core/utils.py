@@ -3,7 +3,10 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.docstore.document import Document
 
 from langchain_mistralai import ChatMistralAI
+from langchain_openai import ChatOpenAI
 from langchain.chat_models.base import BaseChatModel
+from openai import OpenAI
+from core import config
 
 
 def pop_docs_upto_limit(
@@ -21,9 +24,9 @@ def pop_docs_upto_limit(
     return docs
 
 
-def get_llm(model: str, **kwargs) -> BaseChatModel:
-
-    if "mistral" in model:
-        return ChatMistralAI(model=model, **kwargs)  # type: ignore
-
-    raise NotImplementedError(f"Model {model} not supported!")
+def get_llm(model: str) -> ChatOpenAI:
+    return ChatOpenAI(
+        model=model,
+        openai_api_key=config.OPENROUTER_API_KEY,
+        openai_api_base='https://openrouter.ai/api/v1'
+    )

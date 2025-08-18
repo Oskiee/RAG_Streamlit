@@ -28,6 +28,7 @@ def is_query_valid(query: str) -> bool:
 def is_file_valid(file: File) -> bool:
     if (
         len(file.docs) == 0
+        # len(file) == 0
         or "".join([doc.page_content for doc in file.docs]).strip() == ""
     ):
         st.error("Невозможно прочитать документ. Убедитесь, что документ содержит считываемый текст.")
