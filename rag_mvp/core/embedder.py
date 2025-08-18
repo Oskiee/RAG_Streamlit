@@ -6,6 +6,7 @@ import torch
 import numpy as np
 from pinecone import Pinecone, PineconeApiException
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,24 @@ class MultilingualE5(Embeddings):
                 batch = texts[(i*96):num_seq]
             else:
                 batch = texts[(i*96):(i*96+96)]
-
-            data = self.model.inference.embed(
-                model="multilingual-e5-large",
-                inputs=batch,
-                parameters={"input_type": "passage", },
-                ).data
+            try:
+                data = self.model.inference.embed(
+                    model="multilingual-e5-large",
+                    inputs=batch,
+                    parameters={"input_type": "passage", },
+                    ).data
+            except PineconeApiException as e:
+                logger.error(f"Error while making embedding of a batch. Retrying in a minute.")
+                time.sleep(60)
+                data = self.model.inference.embed(
+                    model="multilingual-e5-large",
+                    inputs=batch,
+                    parameters={"input_type": "passage", },
+                    ).data
             
             result += [d['values'] for d in data]
+
+            time.sleep(1)  # Sleep to avoid rate limiting
         
         return result
 

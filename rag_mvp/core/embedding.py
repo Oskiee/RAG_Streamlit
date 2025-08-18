@@ -3,6 +3,7 @@ from langchain_core.vectorstores.base import VectorStoreRetriever
 import time
 import logging
 import sys
+import os
 from datetime import datetime
 
 from .parsing import File
@@ -54,6 +55,10 @@ class FolderIndex:
                     documents=all_docs,
                     embedding=embeddings,
                 )
+            if os.path.exists("faiss_index"):
+                index = FAISS.load_local("faiss_index", embeddings)
+            else:
+                index.save_local("faiss_index")
             index_end_time = datetime.now() - index_start_time
             print(f'------Vectorstore Created: {index_end_time.seconds}s------')
         except KeyError as e:

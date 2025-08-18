@@ -186,7 +186,7 @@ if chatbot_mode:
 
     files_chat = read_files_func(uploaded_files_chat)
 
-    if sum(len(doc.page_content) for file in files_chat for doc in file.docs) > 100_000_000:
+    if sum(len(doc.page_content) for file in files_chat for doc in file.docs) > 100_000_000_000:
         st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
         st.stop()
 
@@ -289,7 +289,7 @@ else:
 
         files = read_files_func(uploaded_files)
 
-        if sum(len(doc.page_content) for file in files for doc in file.docs) > 5_000_000:
+        if sum(len(doc.page_content) for file in files for doc in file.docs) > 100_000_000_000:
             st.warning("Ваши файлы содержат слишком много текста. Пожалуйста, загрузите файлы поменьше.")
             st.stop()
 
