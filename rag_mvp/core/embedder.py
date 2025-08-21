@@ -7,6 +7,7 @@ import numpy as np
 from pinecone import Pinecone, PineconeApiException
 import logging
 import time
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,8 @@ def get_detailed_instruct(task_description: str, query: str) -> str:
 
 class MultilingualE5(Embeddings):
     def __init__(self, model_name="multilingual-e5-large"):
-        self.model = Pinecone(api_key=config.PINECONE_API_KEY, )
+        # self.model = Pinecone(api_key=config.PINECONE_API_KEY, )
+        self.model = SentenceTransformer("sergeyzh/BERTA")
         self.task = 'Given a web search query, retrieve relevant passages that answer the query'
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -24,31 +26,33 @@ class MultilingualE5(Embeddings):
         num_seq = len(texts)
         batches = int(np.ceil(num_seq / 96))
         
-        for i in range(batches):
+        for i in tqdm(range(batches), desc="Vectorizing batches"):
             if i == batches - 1:
                 batch = texts[(i*96):num_seq]
             else:
                 batch = texts[(i*96):(i*96+96)]
             try:
-                data = self.model.inference.embed(
-                    model="multilingual-e5-large",
-                    inputs=batch,
-                    parameters={"input_type": "passage", },
-                    ).data
-            except PineconeApiException as e:
-                logger.error(f"Error while making embedding of a batch. Retrying in a minute.")
-                time.sleep(60)
-                data = self.model.inference.embed(
-                    model="multilingual-e5-large",
-                    inputs=batch,
-                    parameters={"input_type": "passage", },
-                    ).data
+                # data = self.model.inference.embed(
+                #     model="multilingual-e5-large",
+                #     inputs=batch,
+                #     parameters={"input_type": "passage", },
+                #     ).data
+                data = self.model.encode(batch)
+            except Exception as e:
+                logger.error(f"Error while making embedding of a batch. Retrying in 2 sec.")
+                time.sleep(2)
+                # data = self.model.inference.embed(
+                #     model="multilingual-e5-large",
+                #     inputs=batch,
+                #     parameters={"input_type": "passage", },
+                #     ).data
+                data = self.model.encode(batch)
             
-            result += [d['values'] for d in data]
+            # result += [d['values'] for d in data]
 
-            time.sleep(1)  # Sleep to avoid rate limiting
+            # time.sleep(1)  # Sleep to avoid rate limiting
         
-        return result
+        return data
 
     def embed_query(self, query: str) -> List[float]:
         queries = [query]
