@@ -106,11 +106,11 @@ def upload_and_settings():
             model = MODEL_LIST[0]
 
         if option == "Поиск смысловой информации, выявление ключевых концепций":
-            chunk_size_input = 1000
+            chunk_size_input = 3000
             chunk_overlap_input = 400
             num_chunks = 5
         elif option == "Поиск конкретной информации, анализ фактов/данных":
-            chunk_size_input = 500
+            chunk_size_input = 100
             chunk_overlap_input = 100
             num_chunks = 10
         else:
@@ -320,12 +320,13 @@ else:
 
             answer_col, sources_col = st.columns(2)
 
-            llm = get_llm(model=model, temperature=0)
+            llm = get_llm(model=model)
 
             with st.spinner("Ищем ответ на ваш вопрос в документации..."):
                 result = query_folder(
                     folder_index=folder_index,
                     query=query,
+                    chunked_files=chunked_docs,
                     history="",
                     return_all=return_all_chunks,
                     llm=llm,
@@ -334,7 +335,7 @@ else:
 
             with answer_col:
                 st.markdown("#### Ответ")
-                st.markdown(result.answer)
+                response = st.write_stream(result)
 
             with sources_col:
                 st.markdown("#### Источники")

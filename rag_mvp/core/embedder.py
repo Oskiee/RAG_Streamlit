@@ -21,49 +21,50 @@ class MultilingualE5(Embeddings):
         self.model = SentenceTransformer("sergeyzh/BERTA")
         self.task = 'Given a web search query, retrieve relevant passages that answer the query'
 
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: List[str], batch_size: int = 96) -> List[List[float]]:
+        """
+        Кодирует список текстов в вектора с помощью sentence-transformers.
+        """
         result = []
         num_seq = len(texts)
-        batches = int(np.ceil(num_seq / 96))
-        
+        batches = int(np.ceil(num_seq / batch_size))
+
         for i in tqdm(range(batches), desc="Vectorizing batches"):
             if i == batches - 1:
-                batch = texts[(i*96):num_seq]
+                batch = texts[(i * batch_size):num_seq]
             else:
-                batch = texts[(i*96):(i*96+96)]
-            try:
-                # data = self.model.inference.embed(
-                #     model="multilingual-e5-large",
-                #     inputs=batch,
-                #     parameters={"input_type": "passage", },
-                #     ).data
-                data = self.model.encode(batch)
-            except Exception as e:
-                logger.error(f"Error while making embedding of a batch. Retrying in 2 sec.")
-                time.sleep(2)
-                # data = self.model.inference.embed(
-                #     model="multilingual-e5-large",
-                #     inputs=batch,
-                #     parameters={"input_type": "passage", },
-                #     ).data
-                data = self.model.encode(batch)
-            
-            # result += [d['values'] for d in data]
+                batch = texts[(i * batch_size):(i * batch_size + batch_size)]
 
-            # time.sleep(1)  # Sleep to avoid rate limiting
-        
-        return data
+            try:
+                data = self.model.encode(
+                    batch,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при создании эмбеддингов, повтор через 2 сек. {e}")
+                time.sleep(2)
+                data = self.model.encode(
+                    batch,
+                    show_progress_bar=False,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True
+                )
+
+            result.extend(data.tolist())
+
+        return result
 
     def embed_query(self, query: str) -> List[float]:
         queries = [query]
-        embedding = self.model.inference.embed(
-            model='multilingual-e5-large',
-            inputs=queries,
-            parameters={
-                    "input_type": "query"
-                }
+        embedding = self.model.encode(
+            queries,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=True
             )
-        return embedding.data[0]['values']
+        return embedding.tolist()[0]
     # def __init__(self, model_name="intfloat/multilingual-e5-large-instruct"):
     #     self.model = SentenceTransformer(model_name, trust_remote_code=True)
     #     self.task = 'Given a web search query, retrieve relevant passages that answer the query'

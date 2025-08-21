@@ -43,44 +43,45 @@ class FolderIndex:
 
     @classmethod
     def from_files(
-        cls, files: List[File], embeddings: Embeddings, vector_store: Type[VectorStore]
+        cls, files: List["File"], embeddings, vector_store: Type["VectorStore"]
     ) -> "FolderIndex":
-        """Creates an SPARSE index from files."""
-        print('------Combine Files------')
+        """Creates or loads a FAISS vector index from files."""
+        print("------Combine Files------")
         all_docs = cls._combine_files(files)
+
         try:
-            print('------Creating Vectorstore------')
+            print("------Creating / Loading Vectorstore------")
             index_start_time = datetime.now()
-            index = vector_store.from_documents(
+
+            if os.path.exists("faiss_index"):
+                # Загружаем уже существующий индекс
+                index = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+                
+                # # Добавляем новые документы к индексу
+                # new_index = vector_store.from_documents(
+                #     documents=all_docs,
+                #     embedding=embeddings,
+                # )
+                # index.merge_from(new_index)
+
+                # # Сохраняем обновлённый индекс
+                # index.save_local("faiss_index")
+            else:
+                # Если индекса нет — создаём новый и сохраняем
+                index = vector_store.from_documents(
                     documents=all_docs,
                     embedding=embeddings,
                 )
-            if os.path.exists("faiss_index"):
-                index = FAISS.load_local("faiss_index", embeddings)
-            else:
                 index.save_local("faiss_index")
+
             index_end_time = datetime.now() - index_start_time
-            print(f'------Vectorstore Created: {index_end_time.seconds}s------')
+            print(f"------Vectorstore Ready: {index_end_time.seconds}s------")
+
         except KeyError as e:
             print(f"Error: {e}")
             raise e
-        # for file in files[1:]:
-        #     all_docs_temp = cls._combine_files([file])
-        #
-        #     try:
-        #         index_temp = vector_store.from_documents(
-        #             documents=all_docs_temp,
-        #             embedding=embeddings,
-        #         )
-        #     except KeyError as e:
-        #         print(f"Error: {e}")
-        #         raise e
-        #
-        #     index.merge_from(index_temp)
-        #
-        #     time.sleep(5)
 
-        return cls(files=files, index=index)   
+        return cls(files=files, index=index)  
     
 
 @st.cache_resource(show_spinner=False, ttl="8h")
